@@ -28,7 +28,25 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+typedef enum 
+{
+	aguardando = 0,
+	borda_detectada,
+	bot_pressionado,
+}tipo_botao;
+typedef enum 
+{
+	desligado = 0,
+	doisHz,
+	quatroHz,
+	ligado,
+}tipo_led;
 
+typedef enum
+{
+	false = 0,
+	true = 1,
+}tipo_bool;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -43,7 +61,14 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+uint16_t EXTI_interrupt = 0;
+uint16_t TIM3_interrupt = 0;
 
+uint16_t i = 0;
+
+tipo_botao estadoBot = aguardando;
+tipo_led estadoLed = desligado;
+tipo_bool sinal_bot_pressionado = false;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -88,13 +113,65 @@ int main(void)
   MX_TIM3_Init();
   MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
-
+	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  switch (estadoBot)
+	  {
+	  case aguardando:
+		  break;
+	  case borda_detectada:
+		  break;
+	  case bot_pressionado:
+		  sinal_bot_pressionado = true;
+		  i++;
+		  estadoBot = aguardando;
+		  break;
+	  default:
+		  break;
+	  }
+	  
+	  if (sinal_bot_pressionado == true)
+	  {
+		  sinal_bot_pressionado = false;
+		  estadoLed++;
+		  if (estadoLed > 3)
+			  estadoLed = 0;
+	  }
+	  
+	  switch (estadoLed)
+	  {
+	  case desligado:
+		  if (sinal_bot_pressionado) {
+			  htim4.Instance->CCR2 = 0;
+			  estadoLed = doisHz;
+		  }
+		  break;
+	  case doisHz:
+		  if (sinal_bot_pressionado) {
+			  htim4.Instance->CCR2 = 5000 - 1;
+			  estadoLed = quatroHz;
+		  }
+		  break;
+	  case quatroHz:
+		  if (sinal_bot_pressionado) {
+			  htim4.Instance->CCR2 = 2500 - 1;
+			  estadoLed = ligado;
+		  }
+		  break;
+	  case ligado:
+		  if (sinal_bot_pressionado) {
+			  htim4.Instance->CCR2 = 10000 - 1;
+			  estadoLed = desligado;
+		  }
+		  break;
+	  default:
+		  break;
+	  }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -148,7 +225,39 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+	if (GPIO_Pin == GPIO_PIN_0)
+	{
+		EXTI->RTSR = 0; 						// Rising trigger selection register (circuito de detecção de borda)
+		EXTI->IMR = 0; 							// Interrupt mask register
+		__HAL_GPIO_EXTI_CLEAR_IT(GPIO_Pin);		// Clear pending bit from EXT0
+		HAL_NVIC_ClearPendingIRQ(EXTI0_IRQn);	// Clear NVIC pending bit
+		htim3.Instance->CNT = 0;				// Counter is zero
+		HAL_TIM_Base_Start_IT(&htim3);			// Start timer interrupt (TIM3)
+		EXTI_interrupt++;						// EXTI interrupt update counter
+	}
+}
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	HAL_TIM_Base_Stop_IT(&htim3);				// Stop timer interrupt (TIM3)
+	htim3.Instance->CNT = 0;					// Counter is zero
+	if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0))		// Check if the pin is still pressed
+	{
+		TIM3_interrupt++;						// TIM3 interrupt update counter
+		HAL_GPIO_TogglePin(GPIOD, GREEN_Pin);	// Toggle Green LED
+		estadoBot = bot_pressionado;
+	}
+	else
+	{
+		estadoBot = aguardando;
+	}
+	__HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_0);		// Clear pending bit from EXT0
+	HAL_NVIC_ClearPendingIRQ(EXTI0_IRQn);		// Clear NVIC pending bit
+	EXTI->RTSR = 1;								// Rising trigger selection register activated
+	EXTI->IMR = 1;								// Interrupt mask register
+	HAL_NVIC_EnableIRQ(EXTI0_IRQn);				// Enable NVIC EXTI0 interrupt
+}
 /* USER CODE END 4 */
 
 /**
