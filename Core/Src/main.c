@@ -34,6 +34,7 @@ typedef enum
 	borda_detectada,
 	bot_pressionado,
 }tipo_botao;
+
 typedef enum 
 {
 	desligado = 0,
@@ -47,6 +48,13 @@ typedef enum
 	false = 0,
 	true = 1,
 }tipo_bool;
+
+typedef struct
+{
+	tipo_bool ant;
+	tipo_bool atu;
+	uint32_t CDT;
+} tipo_estado_botao;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -69,6 +77,7 @@ uint16_t i = 0;
 tipo_botao estadoBot = aguardando;
 tipo_led estadoLed = desligado;
 tipo_bool sinal_bot_pressionado = false;
+tipo_estado_botao botao = {false, false, 0};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -113,7 +122,7 @@ int main(void)
   MX_TIM3_Init();
   MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
-	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -123,51 +132,22 @@ int main(void)
 	  switch (estadoBot)
 	  {
 	  case aguardando:
+		  botao.ant = false;
+		  botao.atu = false;
+		  if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0))
+		  {
+			  botao.atu = true;
+			  estadoBot = borda_detectada;
+		  }
 		  break;
+		  
 	  case borda_detectada:
+		  
 		  break;
+		  
 	  case bot_pressionado:
 		  sinal_bot_pressionado = true;
-		  i++;
 		  estadoBot = aguardando;
-		  break;
-	  default:
-		  break;
-	  }
-	  
-	  if (sinal_bot_pressionado == true)
-	  {
-		  sinal_bot_pressionado = false;
-		  estadoLed++;
-		  if (estadoLed > 3)
-			  estadoLed = 0;
-	  }
-	  
-	  switch (estadoLed)
-	  {
-	  case desligado:
-		  if (sinal_bot_pressionado) {
-			  htim4.Instance->CCR2 = 0;
-			  estadoLed = doisHz;
-		  }
-		  break;
-	  case doisHz:
-		  if (sinal_bot_pressionado) {
-			  htim4.Instance->CCR2 = 5000 - 1;
-			  estadoLed = quatroHz;
-		  }
-		  break;
-	  case quatroHz:
-		  if (sinal_bot_pressionado) {
-			  htim4.Instance->CCR2 = 2500 - 1;
-			  estadoLed = ligado;
-		  }
-		  break;
-	  case ligado:
-		  if (sinal_bot_pressionado) {
-			  htim4.Instance->CCR2 = 10000 - 1;
-			  estadoLed = desligado;
-		  }
 		  break;
 	  default:
 		  break;
